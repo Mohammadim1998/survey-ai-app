@@ -10,20 +10,21 @@ export default function AudioPlayer({ src }: Props) {
   const waveRef = useRef<HTMLDivElement | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0); // seconds (integer)
+  const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [speed, setSpeed] = useState(1);
+  const [isDragging, setIsDragging] = useState(false);
 
   const bars = 45;
   const heights = [6, 10, 14, 8, 12];
 
+  // ⬇️ Event listeners
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    // ⬇️ فقط هر ثانیه آپدیت می‌شود
     const onTimeUpdate = () => {
-      setCurrentTime(Math.floor(audio.currentTime));
+      if (!isDragging) setCurrentTime(Math.floor(audio.currentTime));
     };
 
     const onLoaded = () => {
@@ -44,7 +45,7 @@ export default function AudioPlayer({ src }: Props) {
       audio.removeEventListener("loadedmetadata", onLoaded);
       audio.removeEventListener("ended", onEnded);
     };
-  }, []);
+  }, [isDragging]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -65,23 +66,55 @@ export default function AudioPlayer({ src }: Props) {
     setSpeed(next);
   };
 
-  const handleWaveClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  // ⬇️ Handle drag
+  const handleDrag = (clientX: number) => {
     if (!audioRef.current || !waveRef.current || !duration) return;
-
     const rect = waveRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
+    let clickX = clientX - rect.left;
+    if (clickX < 0) clickX = 0;
+    if (clickX > rect.width) clickX = rect.width;
     const percent = clickX / rect.width;
-
     const newTime = Math.floor(percent * duration);
-    audioRef.current.currentTime = newTime;
+
     setCurrentTime(newTime);
+    audioRef.current.currentTime = newTime; // ⬅️ این باعث می‌شود جای نوار برنگردد
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsDragging(true);
+    handleDrag(e.clientX);
+
+    const handleMouseMove = (eMove: MouseEvent) => handleDrag(eMove.clientX);
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    setIsDragging(true);
+    handleDrag(e.touches[0].clientX);
+
+    const handleTouchMove = (eMove: TouchEvent) => handleDrag(eMove.touches[0].clientX);
+    const handleTouchEnd = () => {
+      setIsDragging(false);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+
+    window.addEventListener("touchmove", handleTouchMove);
+    window.addEventListener("touchend", handleTouchEnd);
   };
 
   const progress = duration > 0 ? currentTime / duration : 0;
   const activeBars = Math.floor(progress * bars);
 
   return (
-    <div className="w-full flex flex-col gap-y-1 rounded-xl px-3 py-2">
+    <div className="w-full flex flex-col gap-y-1 rounded-xl px-3 py-2 select-none">
       <audio ref={audioRef} src={src} preload="metadata" />
 
       <div className="flex items-center gap-3">
@@ -96,7 +129,8 @@ export default function AudioPlayer({ src }: Props) {
         {/* Waveform */}
         <div
           ref={waveRef}
-          onClick={handleWaveClick}
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
           className="relative flex flex-1 items-center h-7 cursor-pointer"
         >
           {/* Baseline */}
@@ -110,9 +144,7 @@ export default function AudioPlayer({ src }: Props) {
                 className={`w-[3px] rounded-full transition-colors ${
                   i < activeBars ? "bg-orange-500" : "bg-gray-300"
                 }`}
-                style={{
-                  height: `${heights[i % heights.length]}px`,
-                }}
+                style={{ height: `${heights[i % heights.length]}px` }}
               />
             ))}
           </div>
