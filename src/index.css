@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+:root {
+  --color-primary: #F4842F;
+  --color-secondary: #2F64F4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100vw;
+  display: flex;
+  justify-content: center;
+  background-color: white;
+  overflow-x: hidden !important;
+  direction: rtl !important;
+}
