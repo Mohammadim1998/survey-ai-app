@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FaPlay } from "react-icons/fa6";
 
 type Props = {
@@ -15,16 +15,33 @@ export default function AudioPlayer({ src }: Props) {
   const [speed, setSpeed] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
 
-  const bars = 45;
-  const heights = [6, 10, 14, 8, 12];
+  const bars = 80;
 
-  // ⬇️ Event listeners
+  // 🎧 waveform heights (با micro-line ها)
+  const barHeights = useMemo(() => {
+    return Array.from({ length: bars }, (_, i) => {
+      const center = Math.abs(i - bars / 2) / (bars / 2);
+      const base = 5 + (1 - center) * 7; // 5 → 12
+      const noise = Math.random() * 3;
+
+      // 25٪ خط‌های خیلی کوتاه
+      if (Math.random() < 0.25) {
+        return Math.floor(Math.random() * 3) + 2; // 2–4px
+      }
+
+      return Math.floor(base + noise);
+    });
+  }, []);
+
+  // 🎵 audio events
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const onTimeUpdate = () => {
-      if (!isDragging) setCurrentTime(Math.floor(audio.currentTime));
+      if (!isDragging) {
+        setCurrentTime(Math.floor(audio.currentTime));
+      }
     };
 
     const onLoaded = () => {
@@ -51,9 +68,7 @@ export default function AudioPlayer({ src }: Props) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (isPlaying) audio.pause();
-    else audio.play();
-
+    isPlaying ? audio.pause() : audio.play();
     setIsPlaying(!isPlaying);
   };
 
@@ -66,107 +81,105 @@ export default function AudioPlayer({ src }: Props) {
     setSpeed(next);
   };
 
-  // ⬇️ Handle drag
+  // 🖱 drag logic
   const handleDrag = (clientX: number) => {
     if (!audioRef.current || !waveRef.current || !duration) return;
+
     const rect = waveRef.current.getBoundingClientRect();
-    let clickX = clientX - rect.left;
-    if (clickX < 0) clickX = 0;
-    if (clickX > rect.width) clickX = rect.width;
-    const percent = clickX / rect.width;
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const percent = x / rect.width;
     const newTime = Math.floor(percent * duration);
 
+    audioRef.current.currentTime = newTime;
     setCurrentTime(newTime);
-    audioRef.current.currentTime = newTime; // ⬅️ این باعث می‌شود جای نوار برنگردد
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsDragging(true);
     handleDrag(e.clientX);
 
-    const handleMouseMove = (eMove: MouseEvent) => handleDrag(eMove.clientX);
-    const handleMouseUp = () => {
+    const move = (ev: MouseEvent) => handleDrag(ev.clientX);
+    const up = () => {
       setIsDragging(false);
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
   };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     setIsDragging(true);
     handleDrag(e.touches[0].clientX);
 
-    const handleTouchMove = (eMove: TouchEvent) => handleDrag(eMove.touches[0].clientX);
-    const handleTouchEnd = () => {
+    const move = (ev: TouchEvent) => handleDrag(ev.touches[0].clientX);
+    const up = () => {
       setIsDragging(false);
-      window.removeEventListener("touchmove", handleTouchMove);
-      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", up);
     };
 
-    window.addEventListener("touchmove", handleTouchMove);
-    window.addEventListener("touchend", handleTouchEnd);
+    window.addEventListener("touchmove", move);
+    window.addEventListener("touchend", up);
   };
 
-  const progress = duration > 0 ? currentTime / duration : 0;
+  const progress = duration ? currentTime / duration : 0;
   const activeBars = Math.floor(progress * bars);
 
   return (
-    <div className="w-full flex flex-col gap-y-1 rounded-xl px-3 py-2 select-none">
+    <div className="w-full flex flex-col gap-y-0 rounded-xl h-19.25 select-none ">
       <audio ref={audioRef} src={src} preload="metadata" />
 
-      <div className="flex items-center gap-3">
-        {/* Play / Pause */}
+      <div className="flex items-center gap-2">
+        {/* ▶ Play */}
         <button
           onClick={togglePlay}
-          className="flex shrink-0 text-white h-9 w-9 items-center justify-center rounded-full bg-orange-500"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white"
         >
-          {isPlaying ? "❚❚" : <FaPlay />}
+          <span className="w-6 h-6 flex justify-center items-center">
+            {isPlaying ? "❚❚" : <FaPlay />}
+          </span>
         </button>
 
-        {/* Waveform */}
+        {/* 🌊 Waveform */}
         <div
           ref={waveRef}
           onMouseDown={handleMouseDown}
           onTouchStart={handleTouchStart}
-          className="relative flex flex-1 items-center h-7 cursor-pointer"
+          className="w-40 flex flex-1 items-center h-7.5 cursor-pointer"
         >
-          {/* Baseline */}
-          <div className="absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 bg-gray-300 rounded-full" />
-
-          {/* Bars */}
-          <div className="relative flex items-center gap-[3px] w-full">
-            {Array.from({ length: bars }).map((_, i) => (
+          <div className="flex items-center w-full gap-[2px]">
+            {barHeights.map((h, i) => (
               <span
                 key={i}
-                className={`w-[3px] rounded-full transition-colors ${
-                  i < activeBars ? "bg-orange-500" : "bg-gray-300"
-                }`}
-                style={{ height: `${heights[i % heights.length]}px` }}
+                className={`rounded-full transition-colors ${i < activeBars ? "bg-orange-500" : "bg-gray-300"
+                  }`}
+                style={{
+                  width: "2px",
+                  height: `${h}px`,
+                }}
               />
             ))}
           </div>
         </div>
       </div>
 
-      <div className="w-full flex items-center justify-between">
-        {/* Current Time */}
-        <span className="text-xs ml-12 text-orange-500 whitespace-nowrap">
+      {/* ⏱ Time & Speed */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-normal block ml-12 text-orange-500">
           {formatTime(currentTime)}
         </span>
 
-        {/* Speed & Duration */}
-        <div className="flex items-center gap-x-[10px]">
+        <div className="flex items-center gap-[10px]">
           <button
             onClick={toggleSpeed}
-            className="rounded-md bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-600"
+            className="rounded-md bg-white p-1 cursor-pointer flex justify-center items-center h-4 border-[1.25px] border-[#F4842F] text-[10px] font-bold text-orange-600"
           >
             {speed}X
           </button>
 
-          <span className="text-xs text-gray-600 whitespace-nowrap">
+          <span className="text-xs font-normal block text-[#747474]">
             {duration ? formatTime(duration) : "--:--"}
           </span>
         </div>
